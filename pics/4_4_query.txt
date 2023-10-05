@@ -1,0 +1,27 @@
+SELECT this_week, -uniq(user_id) as num_users, status
+FROM
+    (SELECT user_id, --в данном подзапросе находим ушедших полбзователей
+    groupUniqArray(toMonday(toDate(time))) as weeks_visited, --массив с уникальными неделями активности
+    addWeeks(arrayJoin(weeks_visited), +1) this_week, --развертывание каждого элемента массива в запись в результ. таблице
+    if(has(weeks_visited, this_week) = 1, 'retained', 'gone') as status --так как this_week сдвинута на неделю, статус gone будет
+    FROM simulator_20230820.feed_actions                                --у следующей после последней недели в массиве
+    group by user_id)
+
+where status = 'gone'
+
+group by this_week, status
+
+HAVING this_week != addWeeks(toMonday(today()), +1)
+
+union all
+
+SELECT this_week, toInt64(uniq(user_id)) as num_users, status
+FROM
+    (SELECT user_id, 
+    groupUniqArray(toMonday(toDate(time))) as weeks_visited, --аналогично подзапросу для ушедших юзеров, тлоько без сдвига this_week
+    arrayJoin(weeks_visited) this_week, --сдвигать this_week было необходимо именно для gone, т.к. в массиве нет недели, где не было активности
+    if(has(weeks_visited, addWeeks(this_week, -1)) = 1, 'retained', 'new') as status --если this_week - 1week нет в массиве, значит это 1ая неделя юзера
+    FROM simulator_20230820.feed_actions
+    group by user_id)
+
+group by this_week, status
